@@ -95,6 +95,7 @@ def _resolve_ai_route(provider: str | None, model: str | None) -> tuple[str, dic
 @asynccontextmanager
 async def lifespan(_app):
     _init_study_database()
+    _sync_default_user_credentials()
     yield
 
 
@@ -523,16 +524,67 @@ STUDY_MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
 SESSION_COOKIE = "study_system_session"
 SESSION_TTL_SECONDS = 60 * 60 * 24 * 7
 
+# === LOCAL AUTH — server-side credential (FO-1 T2, 2026-08-06) ===
+# The legacy client-visible LOCAL_AUTH_SALT / LOCAL_AUTH_PASSWORD_HASH constants were
+# removed from index.html. Verification now happens here, server-side only, and the
+# credential is derived from LOCAL_AUTH_PASSWORD in the service environment file.
+LOCAL_AUTH_PASSWORD = os.environ.get("LOCAL_AUTH_PASSWORD", "").strip()
+
+
+def _local_auth_salt() -> str:
+    # Deterministic salt derived from the configured local-auth password so the
+    # credential stays stable across restarts without persisting extra material.
+    return hashlib.sha256(("study-system-local-auth:" + LOCAL_AUTH_PASSWORD).encode("utf-8")).hexdigest()[:16]
+
+
+def _local_auth_hash() -> str:
+    if not LOCAL_AUTH_PASSWORD:
+        return ""
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", LOCAL_AUTH_PASSWORD.encode("utf-8"), _local_auth_salt().encode("utf-8"), 200_000
+    )
+    return base64.b64encode(digest).decode("ascii")
+
+
+def _sync_default_user_credentials() -> None:
+    """Reconcile the default user's stored credential with LOCAL_AUTH_PASSWORD (FO-1 T2)."""
+    if not LOCAL_AUTH_PASSWORD:
+        return
+    _ensure_users_file()
+    try:
+        payload = json.loads(USERS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    users = payload.get("users")
+    if not isinstance(users, list):
+        return
+    new_salt, new_hash = _local_auth_salt(), _local_auth_hash()
+    changed = False
+    for user in users:
+        if isinstance(user, dict) and user.get("username") == DEFAULT_USER["username"]:
+            if user.get("password_salt") != new_salt or user.get("password_hash") != new_hash:
+                user["password_salt"] = new_salt
+                user["password_hash"] = new_hash
+                changed = True
+            break
+    if changed:
+        USERS_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
 # The first account is provisioned automatically. Additional accounts can be
 # added to USERS_PATH by an administrator later; there is intentionally no
 # public registration endpoint in this phase.
+# The default user's credential is derived at runtime from LOCAL_AUTH_PASSWORD
+# (FO-1 T2): no credential-derived literals in source. If the env value is
+# unset, provisioning fails closed (no valid hash).
 DEFAULT_USER = {
     "username": "pieye",
     "display_name": "pieye",
-    "enabled": True,
-    "password_salt": "study-system-pieye-v1",
-    "password_hash": "Aq9yp/Ejejxrk1oJ6U8J7yOIeERhU4DoAZEFrWMdgJM=",
+    "enabled": true,
+    "password_salt": _local_auth_salt(),
+    "password_hash": _local_auth_hash(),
 }
+
+
 SESSIONS: dict[str, str] = {}
 
 
@@ -886,6 +938,33 @@ COURSE_PROGRESS_FILES = {
     "build-your-own-x": HERMES_HOME / "home" / "build-your-own-x-progress.json",
     "philosophy": HERMES_HOME / "home" / "philosophy-progress.json",
 }
+@app.post("/api/auth/verify")
+async def auth_verify(req: LoginRequest):
+    """Server-side verification for the static/local auth mode (FO-1 T2).
+
+    Replaces the removed client-side hash check in index.html. Validates against
+    the same user store as /api/auth/login but does NOT issue a session cookie;
+    the frontend enters offline/local mode on success.
+    """
+    username = req.username.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,32}", username) or len(req.password) > 256:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    account = next((user for user in _load_users() if user.get("username") == username), None)
+    if not account:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    actual = _password_hash(req.password, str(account.get("password_salt", "")))
+    expected = str(account.get("password_hash", ""))
+    if not expected or not hmac.compare_digest(actual, expected):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {
+        "status": "ok",
+        "user": {
+            "username": username,
+            "display_name": account.get("display_name", username),
+            "authMode": "local",
+        },
+    }
+
 
 @app.get("/api/sync-courses")
 async def sync_courses_preview(request: Request):
