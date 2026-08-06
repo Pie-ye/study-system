@@ -1,0 +1,17 @@
+[Unit]
+Description=Study System learning portal
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pieye/Container/study-system
+ExecStart=/home/pieye/Container/study-system/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8765
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
