@@ -16,11 +16,19 @@ from pydantic import BaseModel
 import httpx
 
 # === CONFIG ===
-VAULT_ROOT = Path("/home/pieye/Container/Obsidian Vault")
+# All host paths are overridable so the same code runs under systemd or Docker.
+VAULT_ROOT = Path(
+    os.environ.get("VAULT_ROOT", "/home/pieye/Container/Obsidian Vault")
+).expanduser()
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE = os.environ.get("DEEPSEEK_BASE", "https://api.deepseek.com/v1")
 CLIPROXY_BASE = os.environ.get("CLIPROXY_BASE", "http://127.0.0.1:8317/v1").rstrip("/")
-CLIPROXY_KEY_FILE = Path(os.environ.get("CLIPROXY_KEY_FILE", str(Path.home() / ".config/cliproxy/api_key")))
+CLIPROXY_KEY_FILE = Path(
+    os.environ.get(
+        "CLIPROXY_KEY_FILE",
+        str(Path.home() / ".config/cliproxy/api_key"),
+    )
+).expanduser()
 DEFAULT_PROVIDER = os.environ.get("STUDY_AI_PROVIDER", "grok")
 DEFAULT_MODEL = os.environ.get("STUDY_AI_MODEL", "grok-4.5")
 
@@ -512,12 +520,18 @@ async def save_note(req: NoteRequest, request: Request):
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
 
 # === COURSE SYNC — read progress JSONs from Hermes ===
-HERMES_HOME = Path(os.environ.get("HERMES_HOME", "/home/pieye/.hermes"))
-USERS_PATH = HERMES_HOME / "home" / "study-system-users.json"
-STUDY_DATA_PATH = HERMES_HOME / "home" / "study-system-data.json"
-STUDY_DATA_DIR = HERMES_HOME / "home" / "study-system-users"
-USER_PROGRESS_DIR = HERMES_HOME / "home" / "study-system-user-progress"
-STUDY_DB_PATH = Path(os.environ.get("STUDY_DB_PATH", str(HERMES_HOME / "home" / "study-system.sqlite3")))
+HERMES_HOME = Path(os.environ.get("HERMES_HOME", "/home/pieye/.hermes")).expanduser()
+# STUDY_DATA_ROOT lets Docker mount only the study data tree without full Hermes.
+STUDY_DATA_ROOT = Path(
+    os.environ.get("STUDY_DATA_ROOT", str(HERMES_HOME / "home"))
+).expanduser()
+USERS_PATH = STUDY_DATA_ROOT / "study-system-users.json"
+STUDY_DATA_PATH = STUDY_DATA_ROOT / "study-system-data.json"
+STUDY_DATA_DIR = STUDY_DATA_ROOT / "study-system-users"
+USER_PROGRESS_DIR = STUDY_DATA_ROOT / "study-system-user-progress"
+STUDY_DB_PATH = Path(
+    os.environ.get("STUDY_DB_PATH", str(STUDY_DATA_ROOT / "study-system.sqlite3"))
+).expanduser()
 STUDY_DB_SCHEMA_VERSION = 1
 STUDY_DOCUMENT_KEYS = {"study", "philosophy"}
 STUDY_MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
@@ -579,7 +593,7 @@ def _sync_default_user_credentials() -> None:
 DEFAULT_USER = {
     "username": "pieye",
     "display_name": "pieye",
-    "enabled": true,
+    "enabled": True,
     "password_salt": _local_auth_salt(),
     "password_hash": _local_auth_hash(),
 }
@@ -933,10 +947,10 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(SESSION_COOKIE, path="/")
     return {"status": "ok"}
 COURSE_PROGRESS_FILES = {
-    "ai-agents-for-beginners": HERMES_HOME / "home" / "ai-agents-course-progress.json",
-    "awesome-architecture": HERMES_HOME / "home" / "awesome-architecture-progress.json",
-    "build-your-own-x": HERMES_HOME / "home" / "build-your-own-x-progress.json",
-    "philosophy": HERMES_HOME / "home" / "philosophy-progress.json",
+    "ai-agents-for-beginners": STUDY_DATA_ROOT / "ai-agents-course-progress.json",
+    "awesome-architecture": STUDY_DATA_ROOT / "awesome-architecture-progress.json",
+    "build-your-own-x": STUDY_DATA_ROOT / "build-your-own-x-progress.json",
+    "philosophy": STUDY_DATA_ROOT / "philosophy-progress.json",
 }
 @app.post("/api/auth/verify")
 async def auth_verify(req: LoginRequest):
@@ -1078,7 +1092,13 @@ def _get_memory_collection():
     global MEMORY_COLLECTION
     if MEMORY_COLLECTION is None:
         import chromadb
-        client = chromadb.PersistentClient(path="/home/pieye/.hermes/mem0/chroma-jina")
+        chroma_path = Path(
+            os.environ.get(
+                "CHROMA_PATH",
+                str(HERMES_HOME / "mem0" / "chroma-jina"),
+            )
+        ).expanduser()
+        client = chromadb.PersistentClient(path=str(chroma_path))
         MEMORY_COLLECTION = client.get_collection("hermes_mem0_jina")
     return MEMORY_COLLECTION
 
@@ -1141,7 +1161,7 @@ def _summarize_memories(memories, query):
     return f"（從 Hermes 記憶中查到與「{query}」相關的資訊：{combined}）"
 
 # === PHILOSOPHY COURSE ===
-PHILOSOPHY_PROGRESS_PATH = HERMES_HOME / "home" / "philosophy-progress.json"
+PHILOSOPHY_PROGRESS_PATH = STUDY_DATA_ROOT / "philosophy-progress.json"
 
 class PhilosophyCompleteRequest(BaseModel):
     lesson_num: int

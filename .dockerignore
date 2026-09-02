@@ -1,0 +1,15 @@
+.venv
+.git
+.trellis
+.agents
+.codex
+__pycache__
+*.pyc
+tests
+docs
+tools
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+data
+.env

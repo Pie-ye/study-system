@@ -1,0 +1,51 @@
+# study-system — reaches CLIProxy on the cliproxy compose network.
+# Homepage edge keeps proxying 127.0.0.1:8765.
+# Secrets: Infisical folder /study-system.
+# Start: /home/pieye/Container/scripts/with-infisical study-system -- docker compose up -d
+services:
+  study-system:
+    build: .
+    image: study-system:local
+    container_name: study-system
+    env_file:
+      - path: ${STUDY_ENV_FILE:-/home/pieye/.hermes/home/.study-system.env}
+        required: false
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8765"
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      LOCAL_AUTH_PASSWORD: ${LOCAL_AUTH_PASSWORD}
+      VAULT_ROOT: /vault
+      HERMES_HOME: /hermes
+      STUDY_DATA_ROOT: /hermes/home
+      STUDY_DB_PATH: /hermes/home/study-system.sqlite3
+      CHROMA_PATH: /hermes/mem0/chroma-jina
+      CLIPROXY_KEY_FILE: /secrets/cliproxy/api_key
+      # Host-published ports are loopback-only; use the compose DNS name.
+      CLIPROXY_BASE: http://cli-proxy-api:8317/v1
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ${VAULT_HOST_PATH:-/home/pieye/Container/Obsidian Vault}:/vault
+      - ${HERMES_HOME_HOST:-/home/pieye/.hermes}:/hermes
+      - ${CLIPROXY_KEY_HOST:-/home/pieye/.config/cliproxy/api_key}:/secrets/cliproxy/api_key:ro
+    networks:
+      - cliproxy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  cliproxy:
+    name: cliproxyapi_default
+    external: true

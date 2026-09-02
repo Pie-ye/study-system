@@ -1,11 +1,4 @@
-<!-- TRELLIS:START -->
-# Trellis Instructions — Study System
-
-This project is managed by Trellis. The working knowledge you need lives under `.trellis/`:
-
-- `.trellis/spec/index.md` — master spec, principles, and roadmap
-- `.trellis/workspace/journal.md` — per-developer journal
-- `.trellis/tasks/` — active and archived tasks (PRDs, artifacts)
+# Study System Instructions
 
 ## Current Task
 
@@ -21,7 +14,7 @@ This project is managed by Trellis. The working knowledge you need lives under `
 - Task 006: Teacher style upgrade (主動講解 / 移除選擇題) ✓
 - Task 007: UX bugfix wave (日期/今日鎖定/經濟防刷/XSS/學習模式) ✓
 - Task 008: Central database sync (SQLite authority, revision, multi-device) ✓
-- Task 009: Queue direct learn（佇列點擊直進課程）✓ — `.trellis/tasks/task-009-queue-direct-learn/prd.md`
+- Task 009: Queue direct learn（佇列點擊直進課程）✓
 
 ## Principles
 
@@ -31,6 +24,3 @@ This project is managed by Trellis. The working knowledge you need lives under `
 4. Traditional Chinese UI
 5. Mobile-first responsive design
 6. Queue is the primary entry to start a lesson; Habits tab is check-in only (no Today lesson gate)
-
-Managed by Trellis.
-<!-- TRELLIS:END -->
